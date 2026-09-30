@@ -28,8 +28,16 @@ def as_list(value: Any) -> list[Any]:
 @dataclass(frozen=True)
 class Statement:
     effect: Effect
-    actions: list[str]
-    resources: list[str]
+    actions: list[str] = field(default_factory=list)
+    resources: list[str] = field(default_factory=list)
+    # NotAction/NotResource mean "everything except" -- mutually exclusive
+    # with actions/resources in real IAM. Empty means "not used".
+    not_action: list[str] = field(default_factory=list)
+    not_resource: list[str] = field(default_factory=list)
+    # Kept as the raw dict rather than parsed: the evaluator never needs to
+    # understand a Condition's operators, only to notice one is present and
+    # flag it instead of guessing (see evaluator.can).
+    condition: dict[str, Any] | None = None
     sid: str | None = None
     # Only meaningful on trust policies (Role.assume_role_policy) and other
     # resource-based policies -- identity policies (inline/managed, attached
@@ -46,8 +54,11 @@ class Statement:
     def from_raw(cls, raw: dict[str, Any]) -> Statement:
         return cls(
             effect=raw["Effect"],
-            actions=as_list(raw.get("Action", [])),
-            resources=as_list(raw.get("Resource", [])),
+            actions=as_list(raw["Action"]) if "Action" in raw else [],
+            resources=as_list(raw["Resource"]) if "Resource" in raw else [],
+            not_action=as_list(raw["NotAction"]) if "NotAction" in raw else [],
+            not_resource=as_list(raw["NotResource"]) if "NotResource" in raw else [],
+            condition=raw.get("Condition"),
             sid=raw.get("Sid"),
             principal=raw.get("Principal"),
         )
