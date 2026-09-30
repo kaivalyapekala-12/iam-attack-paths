@@ -74,14 +74,25 @@ class PolicyDocument:
 
 
 @dataclass(frozen=True)
+class PolicyVersion:
+    version_id: str
+    document: PolicyDocument
+
+
+@dataclass(frozen=True)
 class Policy:
     """A named policy with a resolved document: either inline (owned by one
-    principal, no ARN) or customer-managed (reusable, has an ARN and lives
-    in Account.managed_policies)."""
+    principal, no ARN, no version history) or customer-managed (reusable,
+    has an ARN and lives in Account.managed_policies). `document` is always
+    the currently-effective (default) version; `versions` additionally
+    holds every version for a customer-managed policy, since technique #8
+    (roll back to a broader old version) needs to see versions that
+    *aren't* in effect right now."""
 
     name: str
     document: PolicyDocument
     arn: str | None = None
+    versions: list[PolicyVersion] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -172,8 +183,49 @@ class Role:
 
 
 @dataclass(frozen=True)
+class LambdaFunction:
+    """Which execution role a Lambda function runs as. Not part of
+    get-account-authorization-details at all -- it comes from a separate
+    lambda:ListFunctions call -- so loader.load_account() never populates
+    this from the offline JSON; it's empty unless something else (a future
+    live-mode loader, or a test) supplies it. Technique #11 (editing an
+    existing function's code) is a real no-op against the sample account as
+    a result -- a documented v1 limitation, not a bug."""
+
+    arn: str
+    execution_role_arn: str
+
+
+@dataclass(frozen=True)
 class Account:
     users: list[User] = field(default_factory=list)
     groups: list[Group] = field(default_factory=list)
     roles: list[Role] = field(default_factory=list)
     managed_policies: dict[str, Policy] = field(default_factory=dict)
+    lambda_functions: list[LambdaFunction] = field(default_factory=list)
+
+    def all_principals(self) -> list[User | Group | Role]:
+        """Every principal a check function might need to run against.
+        Roles and groups matter here, not just users: a role's own
+        permissions can create an escalation (see DeployRole in the sample),
+        and it's only found by checking the role itself, not the user who
+        can assume it."""
+        return [*self.users, *self.groups, *self.roles]
+
+
+# Sentinel target for an Edge that leads straight to admin, rather than to
+# another principal's ARN (e.g. "alice can rewrite her own policy to grant
+# herself AdministratorAccess" has no intermediate hop to name).
+ADMIN = "ADMIN"
+
+
+@dataclass(frozen=True)
+class Edge:
+    """One step in an attack path: `source` can become `target` via
+    `technique`, using `permissions_used`. `target` is either another
+    principal's ARN or the ADMIN sentinel."""
+
+    source: str
+    target: str
+    technique: str
+    permissions_used: list[str]

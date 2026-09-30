@@ -149,7 +149,9 @@
                   "iam:CreateAccessKey",
                   "iam:AddUserToGroup",
                   "iam:PassRole",
-                  "iam:UpdateAssumeRolePolicy"
+                  "iam:UpdateAssumeRolePolicy",
+                  "iam:CreateLoginProfile",
+                  "iam:UpdateLoginProfile"
                 ],
                 "Resource": "*"
               }

@@ -25,6 +25,7 @@ from iam_paths.models import (
     ManagedPolicyRef,
     Policy,
     PolicyDocument,
+    PolicyVersion,
     Role,
     User,
 )
@@ -50,13 +51,16 @@ def _parse_attached_policies(raw_list: list[dict[str, Any]]) -> list[ManagedPoli
 def _parse_managed_policies(raw_list: list[dict[str, Any]]) -> dict[str, Policy]:
     policies: dict[str, Policy] = {}
     for raw in raw_list:
-        default_version = next(
-            v for v in raw["PolicyVersionList"] if v["VersionId"] == raw["DefaultVersionId"]
-        )
+        versions = [
+            PolicyVersion(version_id=v["VersionId"], document=_parse_policy_document(v["Document"]))
+            for v in raw["PolicyVersionList"]
+        ]
+        default_version = next(v for v in versions if v.version_id == raw["DefaultVersionId"])
         policies[raw["Arn"]] = Policy(
             name=raw["PolicyName"],
             arn=raw["Arn"],
-            document=_parse_policy_document(default_version["Document"]),
+            document=default_version.document,
+            versions=versions,
         )
     return policies
 
