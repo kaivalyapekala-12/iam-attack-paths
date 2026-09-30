@@ -1,0 +1,98 @@
+{
+  "admin_definition": "A principal counts as 'admin' if it has AdministratorAccess (or equivalent iam:*/*:* ) attached directly, or can reach such a principal through one or more escalation hops.",
+  "known_admins": [
+    "arn:aws:iam::123456789012:user/ops-admin",
+    "arn:aws:iam::123456789012:role/LambdaAdminRole",
+    "arn:aws:iam::123456789012:group/Admins"
+  ],
+  "paths": [
+    {
+      "principal": "arn:aws:iam::123456789012:user/alice",
+      "reaches_admin": true,
+      "technique": "self_policy_version_rewrite",
+      "hops": [
+        {
+          "action": "iam:CreatePolicyVersion",
+          "on": "arn:aws:iam::123456789012:policy/AlicePolicy",
+          "effect": "alice can publish a new default version of her own attached policy granting herself AdministratorAccess"
+        }
+      ],
+      "why": "Direct escalation: she can rewrite the policy IAM already trusts her to have attached to herself."
+    },
+    {
+      "principal": "arn:aws:iam::123456789012:user/bob",
+      "reaches_admin": true,
+      "technique": "pass_role_to_lambda",
+      "hops": [
+        {
+          "action": "iam:PassRole",
+          "on": "arn:aws:iam::123456789012:role/LambdaAdminRole"
+        },
+        {
+          "action": "lambda:CreateFunction + lambda:InvokeFunction",
+          "on": "*",
+          "effect": "code run inside the function executes with LambdaAdminRole's AdministratorAccess"
+        }
+      ],
+      "why": "Classic pass-role-to-compute-service escalation: bob never assumes the role directly, he attaches it to a Lambda function he controls and invokes it."
+    },
+    {
+      "principal": "arn:aws:iam::123456789012:user/carol",
+      "reaches_admin": true,
+      "technique": "assume_role_then_attach_policy",
+      "hops": [
+        {
+          "action": "sts:AssumeRole",
+          "on": "arn:aws:iam::123456789012:role/DeployRole"
+        },
+        {
+          "action": "iam:AttachUserPolicy",
+          "on": "*",
+          "effect": "as DeployRole, attach AdministratorAccess to herself (or any user)"
+        }
+      ],
+      "why": "Two-hop path: DeployRole's trust policy lets carol assume it, and DeployRole itself can attach admin policies to any user."
+    },
+    {
+      "principal": "arn:aws:iam::123456789012:user/dave",
+      "reaches_admin": true,
+      "technique": "create_access_key_on_admin",
+      "hops": [
+        {
+          "action": "iam:CreateAccessKey",
+          "on": "arn:aws:iam::123456789012:user/ops-admin",
+          "effect": "dave mints long-lived credentials for an existing admin user"
+        }
+      ],
+      "why": "ops-admin already has AdministratorAccess; minting a key for it is equivalent to becoming admin."
+    },
+    {
+      "principal": "arn:aws:iam::123456789012:user/eve",
+      "reaches_admin": true,
+      "technique": "add_user_to_admin_group",
+      "hops": [
+        {
+          "action": "iam:AddUserToGroup",
+          "on": "arn:aws:iam::123456789012:group/Admins",
+          "effect": "eve adds herself to the Admins group, inheriting its AdministratorAccess",
+          "granted_via": "inherited from the 'intern' group's inline policy"
+        }
+      ],
+      "why": "The permission comes from group membership (intern), not a user-attached policy, so the evaluator must resolve permissions through groups, not just direct user policies."
+    },
+    {
+      "principal": "arn:aws:iam::123456789012:user/frank",
+      "reaches_admin": false,
+      "technique": null,
+      "hops": [],
+      "why": "Explicit Deny on every known escalation action overrides the Allow iam:* statement (IAM evaluation: explicit deny always wins). No usable escalation edge exists despite the broad Allow."
+    },
+    {
+      "principal": "arn:aws:iam::123456789012:user/grace",
+      "reaches_admin": false,
+      "technique": null,
+      "hops": [],
+      "why": "ReadOnlyAccess grants no write/attach/pass/assume actions, so there is no outgoing edge in the privilege graph at all."
+    }
+  ]
+}

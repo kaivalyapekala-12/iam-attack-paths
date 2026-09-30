@@ -1,0 +1,337 @@
+{
+  "UserDetailList": [
+    {
+      "Path": "/",
+      "UserName": "alice",
+      "UserId": "AIDAEXAMPLEALICE0001",
+      "Arn": "arn:aws:iam::123456789012:user/alice",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [],
+      "GroupList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "AlicePolicy",
+          "PolicyArn": "arn:aws:iam::123456789012:policy/AlicePolicy"
+        }
+      ],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "UserName": "bob",
+      "UserId": "AIDAEXAMPLEBOB00002",
+      "Arn": "arn:aws:iam::123456789012:user/bob",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [
+        {
+          "PolicyName": "BobLambdaEscalationPolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "PassLambdaAdminRole",
+                "Effect": "Allow",
+                "Action": "iam:PassRole",
+                "Resource": "arn:aws:iam::123456789012:role/LambdaAdminRole"
+              },
+              {
+                "Sid": "CreateAndInvokeLambda",
+                "Effect": "Allow",
+                "Action": [
+                  "lambda:CreateFunction",
+                  "lambda:InvokeFunction"
+                ],
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ],
+      "GroupList": [],
+      "AttachedManagedPolicies": [],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "UserName": "carol",
+      "UserId": "AIDAEXAMPLECAROL003",
+      "Arn": "arn:aws:iam::123456789012:user/carol",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [
+        {
+          "PolicyName": "CarolAssumeDeployRolePolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AssumeDeployRole",
+                "Effect": "Allow",
+                "Action": "sts:AssumeRole",
+                "Resource": "arn:aws:iam::123456789012:role/DeployRole"
+              }
+            ]
+          }
+        }
+      ],
+      "GroupList": [],
+      "AttachedManagedPolicies": [],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "UserName": "dave",
+      "UserId": "AIDAEXAMPLEDAVE0004",
+      "Arn": "arn:aws:iam::123456789012:user/dave",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [
+        {
+          "PolicyName": "DaveCreateAccessKeyPolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "CreateKeyForOpsAdmin",
+                "Effect": "Allow",
+                "Action": "iam:CreateAccessKey",
+                "Resource": "arn:aws:iam::123456789012:user/ops-admin"
+              }
+            ]
+          }
+        }
+      ],
+      "GroupList": [],
+      "AttachedManagedPolicies": [],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "UserName": "eve",
+      "UserId": "AIDAEXAMPLEEVE00005",
+      "Arn": "arn:aws:iam::123456789012:user/eve",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [],
+      "GroupList": [
+        "intern"
+      ],
+      "AttachedManagedPolicies": [],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "UserName": "frank",
+      "UserId": "AIDAEXAMPLEFRANK006",
+      "Arn": "arn:aws:iam::123456789012:user/frank",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [
+        {
+          "PolicyName": "FrankFullIamAllowButDenyEscalation",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AllowAllIam",
+                "Effect": "Allow",
+                "Action": "iam:*",
+                "Resource": "*"
+              },
+              {
+                "Sid": "DenyKnownEscalationActions",
+                "Effect": "Deny",
+                "Action": [
+                  "iam:CreatePolicyVersion",
+                  "iam:SetDefaultPolicyVersion",
+                  "iam:AttachUserPolicy",
+                  "iam:AttachGroupPolicy",
+                  "iam:AttachRolePolicy",
+                  "iam:PutUserPolicy",
+                  "iam:PutGroupPolicy",
+                  "iam:PutRolePolicy",
+                  "iam:CreateAccessKey",
+                  "iam:AddUserToGroup",
+                  "iam:PassRole",
+                  "iam:UpdateAssumeRolePolicy"
+                ],
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ],
+      "GroupList": [],
+      "AttachedManagedPolicies": [],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "UserName": "grace",
+      "UserId": "AIDAEXAMPLEGRACE007",
+      "Arn": "arn:aws:iam::123456789012:user/grace",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [],
+      "GroupList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "ReadOnlyAccess",
+          "PolicyArn": "arn:aws:iam::aws:policy/ReadOnlyAccess"
+        }
+      ],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "UserName": "ops-admin",
+      "UserId": "AIDAEXAMPLEOPSADM08",
+      "Arn": "arn:aws:iam::123456789012:user/ops-admin",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UserPolicyList": [],
+      "GroupList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "AdministratorAccess",
+          "PolicyArn": "arn:aws:iam::aws:policy/AdministratorAccess"
+        }
+      ],
+      "Tags": []
+    }
+  ],
+  "GroupDetailList": [
+    {
+      "Path": "/",
+      "GroupName": "intern",
+      "GroupId": "AGPAEXAMPLEINTERN01",
+      "Arn": "arn:aws:iam::123456789012:group/intern",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "GroupPolicyList": [
+        {
+          "PolicyName": "InternAddUserToAdminsPolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AddSelfToAdmins",
+                "Effect": "Allow",
+                "Action": "iam:AddUserToGroup",
+                "Resource": "arn:aws:iam::123456789012:group/Admins"
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": []
+    },
+    {
+      "Path": "/",
+      "GroupName": "Admins",
+      "GroupId": "AGPAEXAMPLEADMINS02",
+      "Arn": "arn:aws:iam::123456789012:group/Admins",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "GroupPolicyList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "AdministratorAccess",
+          "PolicyArn": "arn:aws:iam::aws:policy/AdministratorAccess"
+        }
+      ]
+    }
+  ],
+  "RoleDetailList": [
+    {
+      "Path": "/",
+      "RoleName": "LambdaAdminRole",
+      "RoleId": "AROAEXAMPLELAMBDA01",
+      "Arn": "arn:aws:iam::123456789012:role/LambdaAdminRole",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "InstanceProfileList": [],
+      "RolePolicyList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "AdministratorAccess",
+          "PolicyArn": "arn:aws:iam::aws:policy/AdministratorAccess"
+        }
+      ],
+      "Tags": []
+    },
+    {
+      "Path": "/",
+      "RoleName": "DeployRole",
+      "RoleId": "AROAEXAMPLEDEPLOY02",
+      "Arn": "arn:aws:iam::123456789012:role/DeployRole",
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:aws:iam::123456789012:user/carol"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "InstanceProfileList": [],
+      "RolePolicyList": [
+        {
+          "PolicyName": "DeployRoleAttachUserPolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "AttachAnyUserPolicy",
+                "Effect": "Allow",
+                "Action": "iam:AttachUserPolicy",
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "Tags": []
+    }
+  ],
+  "Policies": [
+    {
+      "PolicyName": "AlicePolicy",
+      "PolicyId": "ANPAEXAMPLEALICE001",
+      "Arn": "arn:aws:iam::123456789012:policy/AlicePolicy",
+      "Path": "/",
+      "DefaultVersionId": "v1",
+      "AttachmentCount": 1,
+      "PermissionsBoundaryUsageCount": 0,
+      "IsAttachable": true,
+      "CreateDate": "2024-01-01T00:00:00Z",
+      "UpdateDate": "2024-01-01T00:00:00Z",
+      "PolicyVersionList": [
+        {
+          "Document": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "EditOwnPolicy",
+                "Effect": "Allow",
+                "Action": "iam:CreatePolicyVersion",
+                "Resource": "arn:aws:iam::123456789012:policy/AlicePolicy"
+              }
+            ]
+          },
+          "VersionId": "v1",
+          "IsDefaultVersion": true,
+          "CreateDate": "2024-01-01T00:00:00Z"
+        }
+      ]
+    }
+  ]
+}
