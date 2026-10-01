@@ -97,11 +97,47 @@ def _parse_role(raw: dict[str, Any]) -> Role:
     )
 
 
-def load_account(path: str | Path) -> Account:
-    raw = json.loads(Path(path).read_text())
+def _account_from_raw(raw: dict[str, Any]) -> Account:
     return Account(
         users=[_parse_user(u) for u in raw.get("UserDetailList", [])],
         groups=[_parse_group(g) for g in raw.get("GroupDetailList", [])],
         roles=[_parse_role(r) for r in raw.get("RoleDetailList", [])],
         managed_policies=_parse_managed_policies(raw.get("Policies", [])),
+    )
+
+
+def load_account(path: str | Path) -> Account:
+    raw = json.loads(Path(path).read_text())
+    return _account_from_raw(raw)
+
+
+def from_boto3(profile_name: str) -> Account:
+    """Live mode: the read-only equivalent of `aws iam get-account-
+    authorization-details --profile <profile_name>`, paginated. Requires
+    the profile to exist in the caller's AWS config/credentials files
+    (~/.aws) with at least the SecurityAudit managed policy -- see the
+    README for how the scanner IAM user should be set up. Never makes a
+    write call; get_account_authorization_details is inherently read-only."""
+    import boto3
+
+    client = boto3.Session(profile_name=profile_name).client("iam")
+    paginator = client.get_paginator("get_account_authorization_details")
+
+    users: list[dict[str, Any]] = []
+    groups: list[dict[str, Any]] = []
+    roles: list[dict[str, Any]] = []
+    policies: list[dict[str, Any]] = []
+    for page in paginator.paginate():
+        users.extend(page.get("UserDetailList", []))
+        groups.extend(page.get("GroupDetailList", []))
+        roles.extend(page.get("RoleDetailList", []))
+        policies.extend(page.get("Policies", []))
+
+    return _account_from_raw(
+        {
+            "UserDetailList": users,
+            "GroupDetailList": groups,
+            "RoleDetailList": roles,
+            "Policies": policies,
+        }
     )

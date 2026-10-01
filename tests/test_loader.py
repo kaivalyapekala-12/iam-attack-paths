@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from iam_paths.loader import load_account
+from iam_paths.loader import from_boto3, load_account
 
 SAMPLE = Path(__file__).parent.parent / "samples" / "sample_account.json"
 
@@ -104,3 +105,44 @@ def test_loader_decodes_url_encoded_policy_document(tmp_path):
     account = load_account(path)
     user = account.users[0]
     assert _actions_for(user.effective_statements(account)) == {"s3:GetObject"}
+
+
+def _user_page(name: str) -> dict:
+    return {
+        "UserName": name,
+        "Arn": f"arn:aws:iam::123456789012:user/{name}",
+        "UserId": name.upper(),
+        "UserPolicyList": [],
+        "AttachedManagedPolicies": [],
+        "GroupList": [],
+    }
+
+
+def _empty_page(user_name: str) -> dict:
+    return {
+        "UserDetailList": [_user_page(user_name)],
+        "GroupDetailList": [],
+        "RoleDetailList": [],
+        "Policies": [],
+    }
+
+
+def test_from_boto3_uses_the_requested_profile_and_paginates():
+    page_one = _empty_page("alice")
+    page_two = _empty_page("bob")
+
+    mock_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = [page_one, page_two]
+    mock_client.get_paginator.return_value = mock_paginator
+
+    mock_session = MagicMock()
+    mock_session.client.return_value = mock_client
+
+    with patch("boto3.Session", return_value=mock_session) as mock_session_cls:
+        account = from_boto3("audit")
+
+    mock_session_cls.assert_called_once_with(profile_name="audit")
+    mock_session.client.assert_called_once_with("iam")
+    mock_client.get_paginator.assert_called_once_with("get_account_authorization_details")
+    assert {u.name for u in account.users} == {"alice", "bob"}

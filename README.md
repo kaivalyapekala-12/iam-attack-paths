@@ -30,10 +30,14 @@ iam-paths scan --file samples/sample_account.json              # offline, table 
 iam-paths scan --file samples/sample_account.json --format json
 iam-paths scan --file samples/sample_account.json --format html --out out/report.html
 iam-paths scan --file samples/sample_account.json --fail-on critical  # exits 1 if any Critical finding
+
+iam-paths scan --profile audit                                 # live, read-only (needs: pip install -e ".[live]")
 ```
 
-Live scanning against a real AWS account (`--profile`) is reserved for Step 8 and not
-implemented yet.
+Live scanning (`--profile`) calls the read-only `get-account-authorization-details`
+API against whatever AWS CLI profile you name, paginated. It needs `boto3`
+(`pip install -e ".[live]"`) and a profile already configured in `~/.aws` — see
+below for setting one up with least-privilege (`SecurityAudit`) access.
 
 ## Techniques detected
 

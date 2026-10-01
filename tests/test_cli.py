@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from iam_paths.cli import main
+from iam_paths.loader import load_account
 
 SAMPLE = Path(__file__).parent.parent / "samples" / "sample_account.json"
 
@@ -53,10 +54,18 @@ def test_no_fail_on_exits_zero_even_with_critical_findings(capsys):
     assert exit_code == 0
 
 
-def test_profile_flag_is_not_implemented_yet(capsys):
-    exit_code = main(["scan", "--profile", "audit"])
-    assert exit_code == 2
-    assert "Step 8" in capsys.readouterr().err
+def test_profile_scan_uses_from_boto3(monkeypatch, capsys):
+    account = load_account(SAMPLE)
+    calls = []
+    monkeypatch.setattr(
+        "iam_paths.cli.from_boto3", lambda profile_name: calls.append(profile_name) or account
+    )
+
+    exit_code = main(["scan", "--profile", "audit", "--format", "json"])
+
+    assert exit_code == 0
+    assert calls == ["audit"]
+    assert "alice" in capsys.readouterr().out
 
 
 def test_file_and_profile_are_mutually_exclusive():

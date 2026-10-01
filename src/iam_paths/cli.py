@@ -1,8 +1,7 @@
 """The `iam-paths` command. One subcommand, scan, with one job: load an
-account (offline file today; --profile is reserved for step 8's live,
-read-only boto3 loader), build the report, and either print it or write it
-somewhere -- then exit non-zero if --fail-on says the findings are bad
-enough to fail a CI build.
+account (offline --file, or a live --profile via loader.from_boto3), build
+the report, and either print it or write it somewhere -- then exit
+non-zero if --fail-on says the findings are bad enough to fail a CI build.
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from iam_paths.loader import load_account
+from iam_paths.loader import from_boto3, load_account
 from iam_paths.report import ReportRow, build_report, render_html, render_json, render_table
 
 _SEVERITY_RANK = {"Critical": 2, "High": 1}
@@ -38,7 +37,7 @@ def _build_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--file", type=Path, help="Path to a get-account-authorization-details JSON file"
     )
-    source.add_argument("--profile", help="AWS CLI profile for a live, read-only scan (step 8)")
+    source.add_argument("--profile", help="AWS CLI profile for a live, read-only scan")
     scan.add_argument("--format", choices=["table", "json", "html"], default="table")
     scan.add_argument("--fail-on", choices=["critical", "high"], default=None)
     scan.add_argument("--out", type=Path, default=None, help="Write output here instead of stdout")
@@ -50,14 +49,16 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
     if args.profile is not None:
-        print(
-            "Live AWS scanning (--profile) isn't implemented yet -- "
-            "see Step 8 (loader.from_boto3) in the build guide.",
-            file=sys.stderr,
-        )
-        return 2
-
-    account = load_account(args.file)
+        try:
+            account = from_boto3(args.profile)
+        except ImportError:
+            print(
+                "Live scanning needs boto3. Install it with: pip install -e '.[live]'",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        account = load_account(args.file)
     rows = build_report(account)
 
     if args.format == "table":
