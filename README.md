@@ -21,8 +21,6 @@ iam-paths scan --file samples/sample_account.json --format table
 > silently failing to process the editable-install `.pth` file. Work around it with
 > a regular install instead: `pip install .` (re-run after each code change).
 
-
-
 ## Commands
 
 ```bash
@@ -59,7 +57,40 @@ Based on [Rhino Security Labs' AWS privilege-escalation research](https://rhinos
 
 ## Results on a real AWS account
 
-Pending Step 8 (testing against [IAM Vulnerable](https://github.com/BishopFox/iam-vulnerable)).
+Scanned a throwaway AWS account deployed with [IAM Vulnerable](https://github.com/BishopFox/iam-vulnerable)
+(default, free config only — IAM resources, no Lambda/EC2/Glue/SageMaker/CloudFormation
+modules). The account's Organization enforces a Service Control Policy denying
+`iam:CreateGroup`, so 3 of 265 planned resources (all IAM Groups) never deployed —
+noted below where it affects a specific scenario.
+
+**Detected 14 of 32 escalation scenarios** in IAM Vulnerable's `privesc-paths` module:
+
+`privesc1` `3` `4` `5` `6` `7` `8` `9` `10` `11` `12` `14` `15` `20`
+
+The other 18, broken down by why:
+
+| Why not detected | Count | Scenarios |
+|---|---|---|
+| Account's org SCP blocked `iam:CreateGroup`, so the target group was never created | 2 | `privesc13` (AddUserToGroup), `privesc-sre` (admin access flows through a group that doesn't exist) |
+| IAM Vulnerable's own maintainers note it isn't exploitable via Terraform alone (confirmed in their source comment: needs a manually-created 2nd policy version) | 1 | `privesc2` (SetExistingDefaultPolicyVersion) |
+| Needs the optional (paid) Lambda module, which wasn't deployed — no function exists to edit | 1 | `privesc17` (EditExistingLambdaFunctionWithRole) |
+| Out of this tool's 13 techniques by design (CodeBuild, EC2 Instance Connect, SageMaker, SSM, Glue, CloudFormation `UpdateStack`, Data Pipeline) | 12 | `privesc-codeBuildCreateProjectPassRole`, `privesc-ec2InstanceConnect`, `privesc-sageMaker*` (×4), `privesc-ssm*` (×2), `privesc18`, `privesc19`, `privesc-CloudFormationUpdateStack`, `privesc21` |
+| Real technique-coverage gap: needs a Lambda `CreateEventSourceMapping` (DynamoDB-trigger) variant of pass-role-to-Lambda; this tool's check only covers the direct-invoke variant | 1 | `privesc16` |
+| Chain genuinely traversable (confirmed: the edge exists in the graph) — just never the *shortest* path for an already-admin deployer, since the scenario is designed around a separate low-privilege identity | 1 | `privesc-AssumeRole` chain |
+
+**Correctness validation** (IAM Vulnerable's separate `tool-testing` module, built specifically
+to catch scanners with wrong Allow/Deny/NotAction/Condition logic):
+- **5 of 5** "false positive" traps correctly produced *no* path — confirms explicit-Deny-wins,
+  `NotAction`, resource-scoping, and condition-scoping are all handled correctly and the tool
+  doesn't over-report.
+- **3 of 4** "false negative" traps correctly detected. The one miss
+  (`fn3-exploitableConditionConstraint`) is intentional: this tool only resolves conditions we
+  can't verify at scan time (see Limitations) by refusing to claim the path exists, rather than
+  guessing — the deliberate trade-off that makes the 5/5 false-positive result above possible.
+
+False positives found: **0**.
+
+PMapper comparison: not done.
 
 ## Limitations (v1)
 
