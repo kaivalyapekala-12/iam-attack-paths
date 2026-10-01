@@ -212,6 +212,15 @@ class Account:
         can assume it."""
         return [*self.users, *self.groups, *self.roles]
 
+    def principal_by_arn(self, arn: str) -> User | Group | Role | None:
+        """A graph Edge/Hop only stores ARNs, not object references, so
+        remediation.py needs this to get back to the actual principal (and
+        its policies) that a hop's source ARN refers to."""
+        for principal in self.all_principals():
+            if principal.arn == arn:
+                return principal
+        return None
+
 
 # Sentinel target for an Edge that leads straight to admin, rather than to
 # another principal's ARN (e.g. "alice can rewrite her own policy to grant

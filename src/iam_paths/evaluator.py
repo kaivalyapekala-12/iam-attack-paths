@@ -41,7 +41,11 @@ def _wildcard_match(pattern: str, value: str, *, case_insensitive: bool) -> bool
     return re.match(regex, value, flags) is not None
 
 
-def _action_matches(statement: Statement, action: str) -> bool:
+def action_matches(statement: Statement, action: str) -> bool:
+    """Whether this statement's Action/NotAction covers `action`, ignoring
+    Resource entirely. Exposed publicly (not just a can()-internal helper)
+    because remediation.py needs to find the statement granting a
+    permission regardless of which resource a check matched it against."""
     if statement.not_action:
         return not any(
             _wildcard_match(p, action, case_insensitive=True) for p in statement.not_action
@@ -57,8 +61,9 @@ def _resource_matches(statement: Statement, resource: str) -> bool:
     return any(_wildcard_match(p, resource, case_insensitive=False) for p in statement.resources)
 
 
-def _matches(statement: Statement, action: str, resource: str) -> bool:
-    return _action_matches(statement, action) and _resource_matches(statement, resource)
+def statement_matches(statement: Statement, action: str, resource: str) -> bool:
+    """Whether this one statement applies to the given action AND resource."""
+    return action_matches(statement, action) and _resource_matches(statement, resource)
 
 
 def can(principal: User | Group | Role, action: str, resource: str, account: Account) -> Decision:
@@ -75,7 +80,9 @@ def can(principal: User | Group | Role, action: str, resource: str, account: Acc
     7. A matching Allow with a Condition can't be resolved without runtime
        request context, so it's flagged rather than guessed at.
     """
-    matching = [s for s in principal.effective_statements(account) if _matches(s, action, resource)]
+    matching = [
+        s for s in principal.effective_statements(account) if statement_matches(s, action, resource)
+    ]
 
     if any(s.effect == "Deny" for s in matching):
         return Decision.DENIED
