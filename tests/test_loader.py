@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from iam_paths.loader import from_boto3, load_account
 
 SAMPLE = Path(__file__).parent.parent / "samples" / "sample_account.json"
@@ -128,6 +130,11 @@ def _empty_page(user_name: str) -> dict:
 
 
 def test_from_boto3_uses_the_requested_profile_and_paginates():
+    # boto3 is an optional "live" extra (see pyproject.toml) -- offline
+    # dev/CI installs (`pip install -e ".[dev]"`) never have it, so this
+    # test skips cleanly there instead of failing on an unrelated missing
+    # dependency.
+    pytest.importorskip("boto3")
     page_one = _empty_page("alice")
     page_two = _empty_page("bob")
 
