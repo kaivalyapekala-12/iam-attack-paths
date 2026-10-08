@@ -4,7 +4,7 @@ A Python CLI that reads an AWS account's IAM setup (users, groups, roles, polici
 finds every way a low-privilege principal can escalate to admin, and recommends the
 one permission to remove for each path.
 
-<!-- TODO: demo GIF here -->
+![demo](demo.gif)
 
 ## Quick start
 
