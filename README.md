@@ -72,10 +72,11 @@ notebook, Glue endpoint, or CloudFormation stack) to already exist with a
 privileged role attached — `get-account-authorization-details` doesn't
 include that inventory, so `--profile` live mode fetches it separately via
 read-only `ec2:DescribeInstances`, `sagemaker:ListNotebookInstances`,
-`glue:GetDevEndpoints`, and `cloudformation:DescribeStacks` calls. Verified
-with unit tests; not yet validated against a live account that actually has
-such resources (our own test account deliberately doesn't, to avoid cost —
-see Results below).
+`glue:GetDevEndpoints`, and `cloudformation:DescribeStacks` calls. Unit-
+tested, and confirmed running end-to-end against a real AWS account without
+errors — it just finds nothing there, since our test account deliberately
+has no EC2/SageMaker/Glue/CloudFormation resources deployed (see Results
+below).
 
 ## Results on a real AWS account
 
@@ -85,20 +86,36 @@ modules). The account's Organization enforces a Service Control Policy denying
 `iam:CreateGroup`, so 3 of 265 planned resources (all IAM Groups) never deployed —
 noted below where it affects a specific scenario.
 
-**Detected 14 of 32 escalation scenarios** in IAM Vulnerable's `privesc-paths` module:
+**Detected 21 of 32 escalation scenarios** in IAM Vulnerable's `privesc-paths` module
+(up from an initial 14/32 — see history below):
 
-`privesc1` `3` `4` `5` `6` `7` `8` `9` `10` `11` `12` `14` `15` `20`
+`privesc1` `3` `4` `5` `6` `7` `8` `9` `10` `11` `12` `14` `15` `16` `18` `20` `21`
+`privesc-codeBuildCreateProjectPassRole` `privesc-sageMakerCreateNotebookPassRole`
+`privesc-sageMakerCreateProcessingJobPassRole` `privesc-sageMakerCreateTrainingJobPassRole`
 
-The other 18, broken down by why:
+The other 11, broken down by why:
 
 | Why not detected | Count | Scenarios |
 |---|---|---|
+| Needs a real target resource (EC2 instance, SageMaker notebook, Glue endpoint, CloudFormation stack, or Lambda function) that already exists with a privileged role attached — the tool's inventory-fetching code is implemented and unit-tested (techniques #20-#25), but no such resource exists in this account since the optional paid modules were skipped to avoid cost | 6 | `privesc-ec2InstanceConnect`, `privesc-sageMakerCreatePresignedNotebookURL`, `privesc-ssmSendCommand`, `privesc-ssmStartSession`, `privesc19` (Glue), `privesc-CloudFormationUpdateStack` |
 | Account's org SCP blocked `iam:CreateGroup`, so the target group was never created | 2 | `privesc13` (AddUserToGroup), `privesc-sre` (admin access flows through a group that doesn't exist) |
 | IAM Vulnerable's own maintainers note it isn't exploitable via Terraform alone (confirmed in their source comment: needs a manually-created 2nd policy version) | 1 | `privesc2` (SetExistingDefaultPolicyVersion) |
 | Needs the optional (paid) Lambda module, which wasn't deployed — no function exists to edit | 1 | `privesc17` (EditExistingLambdaFunctionWithRole) |
-| Out of this tool's 13 techniques by design (CodeBuild, EC2 Instance Connect, SageMaker, SSM, Glue, CloudFormation `UpdateStack`, Data Pipeline) | 12 | `privesc-codeBuildCreateProjectPassRole`, `privesc-ec2InstanceConnect`, `privesc-sageMaker*` (×4), `privesc-ssm*` (×2), `privesc18`, `privesc19`, `privesc-CloudFormationUpdateStack`, `privesc21` |
-| Real technique-coverage gap: needs a Lambda `CreateEventSourceMapping` (DynamoDB-trigger) variant of pass-role-to-Lambda; this tool's check only covers the direct-invoke variant | 1 | `privesc16` |
 | Chain genuinely traversable (confirmed: the edge exists in the graph) — just never the *shortest* path for an already-admin deployer, since the scenario is designed around a separate low-privilege identity | 1 | `privesc-AssumeRole` chain |
+
+**History — this number went up twice, each time independently re-verified by re-running
+the scan against the same live account, not just claimed:**
+1. **14/32** with the original 13 techniques.
+2. **21/32** after adding 6 more PassRole-to-service techniques (CodeBuild, Glue, Data
+   Pipeline, 3× SageMaker) and fixing a real gap found in the first pass: `privesc16`
+   needs a Lambda `CreateEventSourceMapping` (DynamoDB-trigger) variant of pass-role-to-
+   Lambda that the original check didn't cover.
+3. Also added live-mode resource-inventory fetching (techniques #20-#25, Lambda/EC2/
+   SageMaker/Glue/CloudFormation), confirmed working end-to-end against the real account
+   — including catching a real bug this validation surfaced: a warning was printing to
+   stdout instead of stderr, corrupting `--format json` output. This pass added 0 new
+   detections only because the account has no real EC2/SageMaker/Glue/CloudFormation/
+   Lambda resources deployed (see table above) — not because the code doesn't work.
 
 **Correctness validation** (IAM Vulnerable's separate `tool-testing` module, built specifically
 to catch scanners with wrong Allow/Deny/NotAction/Condition logic):

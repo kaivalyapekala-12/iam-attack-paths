@@ -15,6 +15,7 @@ Two real AWS quirks get normalized here:
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -129,7 +130,10 @@ def _safe_fetch(label: str, fetch: Any) -> list[Any]:
     try:
         return fetch()
     except botocore.exceptions.ClientError as exc:
-        print(f"Warning: couldn't read {label} ({exc.response['Error']['Code']}); skipping.")
+        print(
+            f"Warning: couldn't read {label} ({exc.response['Error']['Code']}); skipping.",
+            file=sys.stderr,
+        )
         return []
 
 

@@ -325,3 +325,25 @@ def test_from_boto3_degrades_gracefully_when_a_service_denies_access():
 
     assert account.lambda_functions == []
     assert len(account.ec2_instances) == 1  # other inventories still populated
+
+
+def test_from_boto3_degradation_warning_goes_to_stderr_not_stdout(capsys):
+    # Real bug caught during live validation: the warning printed to
+    # stdout, which corrupted `--format json` output when piped/parsed by
+    # another program. It belongs on stderr.
+    pytest.importorskip("boto3")
+    import botocore.exceptions
+
+    clients = _mock_clients_for_inventory_test()
+    clients["lambda"].get_paginator.side_effect = botocore.exceptions.ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "ListFunctions"
+    )
+    mock_session = MagicMock()
+    mock_session.client.side_effect = lambda service, *a, **kw: clients[service]
+
+    with patch("boto3.Session", return_value=mock_session):
+        from_boto3("audit")
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Lambda functions" in captured.err
