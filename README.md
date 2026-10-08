@@ -50,10 +50,16 @@ Based on [Rhino Security Labs' AWS privilege-escalation research](https://rhinos
 7. Set/reset another user's console password
 8. Roll back a policy to a broader old version
 9. Rewrite a role's trust policy, then assume it
-10. Pass a privileged role to a Lambda function
+10. Pass a privileged role to a Lambda function (direct invoke, or an event-source trigger like a DynamoDB stream)
 11. Edit an existing Lambda function's code
 12. Pass a privileged role to an EC2 instance
 13. Pass a privileged role to a CloudFormation stack
+14. Pass a privileged role to a CodeBuild project
+15. Pass a privileged role to a Glue development endpoint
+16. Pass a privileged role to a Data Pipeline
+17. Pass a privileged role to a SageMaker notebook instance
+18. Pass a privileged role to a SageMaker training job
+19. Pass a privileged role to a SageMaker processing job
 
 ## Results on a real AWS account
 

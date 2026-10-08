@@ -281,12 +281,40 @@ def _pass_role_edges(
     return edges
 
 
+# Two ways to actually trigger a Lambda function you've created with a
+# passed role: invoke it directly, or wire it to an event source (e.g. a
+# DynamoDB stream) that invokes it for you. Either one completes the
+# technique, so this isn't a plain "all of these" check like
+# _pass_role_edges handles -- it needs "CreateFunction AND (either
+# trigger)".
+_LAMBDA_TRIGGER_ACTIONS = ("lambda:InvokeFunction", "lambda:CreateEventSourceMapping")
+
+
 def check_lambda_pass_role(principal: User | Group | Role, account: Account) -> list[Edge]:
-    """#10: iam:PassRole + lambda:CreateFunction + lambda:InvokeFunction ->
-    create a Lambda function running as the passed role, then invoke it."""
-    return _pass_role_edges(
-        principal, account, "lambda_pass_role", "lambda:CreateFunction", "lambda:InvokeFunction"
-    )
+    """#10: iam:PassRole + lambda:CreateFunction + a way to trigger it
+    (direct invoke, or an event source mapping like a DynamoDB stream) ->
+    create a Lambda function running as the passed role, then trigger it."""
+    edges = []
+    for role in account.roles:
+        if role.arn == principal.arn:
+            continue
+        if not _allowed(principal, "iam:PassRole", role.arn, account):
+            continue
+        if not _allowed(principal, "lambda:CreateFunction", "*", account):
+            continue
+        trigger = next(
+            (a for a in _LAMBDA_TRIGGER_ACTIONS if _allowed(principal, a, "*", account)), None
+        )
+        if trigger is not None:
+            edges.append(
+                Edge(
+                    source=principal.arn,
+                    target=role.arn,
+                    technique="lambda_pass_role",
+                    permissions_used=["iam:PassRole", "lambda:CreateFunction", trigger],
+                )
+            )
+    return edges
 
 
 def check_update_lambda_code(principal: User | Group | Role, account: Account) -> list[Edge]:
@@ -328,6 +356,74 @@ def check_cloudformation_pass_role(principal: User | Group | Role, account: Acco
     )
 
 
+def check_codebuild_pass_role(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#14: iam:PassRole + codebuild:CreateProject + codebuild:StartBuild ->
+    create a CodeBuild project with an attacker-controlled buildspec that
+    runs as the passed role, then start a build to execute it."""
+    return _pass_role_edges(
+        principal, account, "codebuild_pass_role", "codebuild:CreateProject", "codebuild:StartBuild"
+    )
+
+
+def check_glue_pass_role(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#15: iam:PassRole + glue:CreateDevEndpoint -> create a Glue
+    development endpoint running as the passed role, then SSH into it to
+    reach the role's credentials."""
+    return _pass_role_edges(principal, account, "glue_pass_role", "glue:CreateDevEndpoint")
+
+
+def check_datapipeline_pass_role(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#16: iam:PassRole + datapipeline:CreatePipeline +
+    PutPipelineDefinition + ActivatePipeline -> create and run a Data
+    Pipeline with attacker-controlled activities running as the passed
+    role."""
+    return _pass_role_edges(
+        principal,
+        account,
+        "datapipeline_pass_role",
+        "datapipeline:CreatePipeline",
+        "datapipeline:PutPipelineDefinition",
+        "datapipeline:ActivatePipeline",
+    )
+
+
+def check_sagemaker_notebook_pass_role(
+    principal: User | Group | Role, account: Account
+) -> list[Edge]:
+    """#17: iam:PassRole + sagemaker:CreateNotebookInstance +
+    CreatePresignedNotebookInstanceUrl -> create a SageMaker notebook
+    running as the passed role, then open it to reach the role's
+    credentials from a terminal inside it."""
+    return _pass_role_edges(
+        principal,
+        account,
+        "sagemaker_notebook_pass_role",
+        "sagemaker:CreateNotebookInstance",
+        "sagemaker:CreatePresignedNotebookInstanceUrl",
+    )
+
+
+def check_sagemaker_training_pass_role(
+    principal: User | Group | Role, account: Account
+) -> list[Edge]:
+    """#18: iam:PassRole + sagemaker:CreateTrainingJob -> run a training
+    job with an attacker-controlled container image as the passed role."""
+    return _pass_role_edges(
+        principal, account, "sagemaker_training_pass_role", "sagemaker:CreateTrainingJob"
+    )
+
+
+def check_sagemaker_processing_pass_role(
+    principal: User | Group | Role, account: Account
+) -> list[Edge]:
+    """#19: iam:PassRole + sagemaker:CreateProcessingJob -> run a
+    processing job with an attacker-controlled container image as the
+    passed role."""
+    return _pass_role_edges(
+        principal, account, "sagemaker_processing_pass_role", "sagemaker:CreateProcessingJob"
+    )
+
+
 CHECKS = [
     check_new_policy_version,
     check_attach_managed_policy,
@@ -342,6 +438,12 @@ CHECKS = [
     check_update_lambda_code,
     check_ec2_pass_role,
     check_cloudformation_pass_role,
+    check_codebuild_pass_role,
+    check_glue_pass_role,
+    check_datapipeline_pass_role,
+    check_sagemaker_notebook_pass_role,
+    check_sagemaker_training_pass_role,
+    check_sagemaker_processing_pass_role,
 ]
 
 

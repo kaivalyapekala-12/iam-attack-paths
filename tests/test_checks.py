@@ -6,13 +6,19 @@ from iam_paths.checks import (
     check_assume_role,
     check_attach_managed_policy,
     check_cloudformation_pass_role,
+    check_codebuild_pass_role,
     check_console_password,
     check_create_access_key,
+    check_datapipeline_pass_role,
     check_ec2_pass_role,
+    check_glue_pass_role,
     check_lambda_pass_role,
     check_new_policy_version,
     check_rewrite_trust_policy,
     check_rollback_policy_version,
+    check_sagemaker_notebook_pass_role,
+    check_sagemaker_processing_pass_role,
+    check_sagemaker_training_pass_role,
     check_update_lambda_code,
     check_write_inline_policy,
     run_all_checks,
@@ -135,7 +141,7 @@ def test_bob_can_pass_lambdaadminrole_to_a_lambda_function():
 
 
 def test_checks_list_matches_implemented_techniques():
-    assert len(CHECKS) == 13
+    assert len(CHECKS) == 19
 
 
 def test_write_inline_policy_returns_no_edge_when_not_allowed():
@@ -379,3 +385,157 @@ def test_ec2_and_cloudformation_pass_role_edges():
     assert ec2_edges[0].technique == "ec2_pass_role"
     assert len(cfn_edges) == 1
     assert cfn_edges[0].technique == "cloudformation_pass_role"
+
+
+def _pass_role_attacker(role_arn: str, *service_actions: str) -> User:
+    return User(
+        name="attacker",
+        arn="arn:aws:iam::123456789012:user/attacker",
+        user_id="A1",
+        inline_policies=[
+            Policy(
+                name="p",
+                document=PolicyDocument(
+                    statements=[
+                        Statement(effect="Allow", actions=["iam:PassRole"], resources=[role_arn]),
+                        Statement(
+                            effect="Allow", actions=list(service_actions), resources=["*"]
+                        ),
+                    ]
+                ),
+            )
+        ],
+    )
+
+
+def test_codebuild_pass_role_edge():
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(role.arn, "codebuild:CreateProject", "codebuild:StartBuild")
+    account = Account(users=[attacker], roles=[role])
+
+    edges = check_codebuild_pass_role(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].technique == "codebuild_pass_role"
+    assert edges[0].target == role.arn
+
+
+def test_glue_pass_role_edge():
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(role.arn, "glue:CreateDevEndpoint")
+    account = Account(users=[attacker], roles=[role])
+
+    edges = check_glue_pass_role(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].technique == "glue_pass_role"
+
+
+def test_datapipeline_pass_role_edge():
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(
+        role.arn,
+        "datapipeline:CreatePipeline",
+        "datapipeline:PutPipelineDefinition",
+        "datapipeline:ActivatePipeline",
+    )
+    account = Account(users=[attacker], roles=[role])
+
+    edges = check_datapipeline_pass_role(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].technique == "datapipeline_pass_role"
+
+
+def test_sagemaker_notebook_pass_role_edge():
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(
+        role.arn, "sagemaker:CreateNotebookInstance", "sagemaker:CreatePresignedNotebookInstanceUrl"
+    )
+    account = Account(users=[attacker], roles=[role])
+
+    edges = check_sagemaker_notebook_pass_role(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].technique == "sagemaker_notebook_pass_role"
+
+
+def test_sagemaker_training_pass_role_edge():
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(role.arn, "sagemaker:CreateTrainingJob")
+    account = Account(users=[attacker], roles=[role])
+
+    edges = check_sagemaker_training_pass_role(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].technique == "sagemaker_training_pass_role"
+
+
+def test_sagemaker_processing_pass_role_edge():
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(role.arn, "sagemaker:CreateProcessingJob")
+    account = Account(users=[attacker], roles=[role])
+
+    edges = check_sagemaker_processing_pass_role(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].technique == "sagemaker_processing_pass_role"
+
+
+def test_lambda_pass_role_accepts_event_source_mapping_as_trigger():
+    # privesc16 in IAM Vulnerable: PassRole + CreateFunction + an event
+    # source mapping (e.g. a DynamoDB stream) instead of direct
+    # lambda:InvokeFunction -- a different way to trigger the same
+    # function-runs-as-the-passed-role primitive.
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(
+        role.arn, "lambda:CreateFunction", "lambda:CreateEventSourceMapping"
+    )
+    account = Account(users=[attacker], roles=[role])
+
+    edges = check_lambda_pass_role(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].technique == "lambda_pass_role"
+    assert "lambda:CreateEventSourceMapping" in edges[0].permissions_used
+
+
+def test_lambda_pass_role_without_any_trigger_action_produces_no_edge():
+    role = Role(
+        name="Infra",
+        arn="arn:aws:iam::123456789012:role/Infra",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    attacker = _pass_role_attacker(role.arn, "lambda:CreateFunction")
+    account = Account(users=[attacker], roles=[role])
+
+    assert check_lambda_pass_role(attacker, account) == []
