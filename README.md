@@ -60,6 +60,22 @@ Based on [Rhino Security Labs' AWS privilege-escalation research](https://rhinos
 17. Pass a privileged role to a SageMaker notebook instance
 18. Pass a privileged role to a SageMaker training job
 19. Pass a privileged role to a SageMaker processing job
+20. SSH into an existing EC2 instance via EC2 Instance Connect
+21. Run a command on an existing EC2 instance via SSM
+22. Start an interactive session on an existing EC2 instance via SSM
+23. Open a presigned URL into an existing SageMaker notebook
+24. Update an existing Glue development endpoint
+25. Update an existing CloudFormation stack
+
+Techniques 20-25 need a real target resource (an EC2 instance, SageMaker
+notebook, Glue endpoint, or CloudFormation stack) to already exist with a
+privileged role attached — `get-account-authorization-details` doesn't
+include that inventory, so `--profile` live mode fetches it separately via
+read-only `ec2:DescribeInstances`, `sagemaker:ListNotebookInstances`,
+`glue:GetDevEndpoints`, and `cloudformation:DescribeStacks` calls. Verified
+with unit tests; not yet validated against a live account that actually has
+such resources (our own test account deliberately doesn't, to avoid cost —
+see Results below).
 
 ## Results on a real AWS account
 

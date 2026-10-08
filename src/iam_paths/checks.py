@@ -424,6 +424,124 @@ def check_sagemaker_processing_pass_role(
     )
 
 
+def _existing_resource_edges(
+    principal: User | Group | Role,
+    account: Account,
+    resources,  # noqa: ANN001 - heterogeneous list of the EC2Instance/etc. dataclasses
+    role_arn_of,  # noqa: ANN001 - callable(resource) -> str | None
+    action: str,
+    technique: str,
+) -> list[Edge]:
+    """Shared by #20-#25: each needs a specific action on an EXISTING
+    resource (an EC2 instance, SageMaker notebook, Glue endpoint, or
+    CloudFormation stack) that already has a privileged role attached --
+    not just permission to create one. All five inventories are empty
+    unless a live-mode loader or test supplies them (see each dataclass's
+    docstring in models.py), so these checks are real no-ops against the
+    offline sample."""
+    edges = []
+    for resource in resources:
+        role_arn = role_arn_of(resource)
+        if role_arn is None:
+            continue
+        role = next((r for r in account.roles if r.arn == role_arn), None)
+        if role is None:
+            continue
+        if _allowed(principal, action, resource.arn, account):
+            edges.append(
+                Edge(
+                    source=principal.arn,
+                    target=role.arn,
+                    technique=technique,
+                    permissions_used=[action],
+                )
+            )
+    return edges
+
+
+def check_ec2_instance_connect(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#20: ec2-instance-connect:SendSSHPublicKey on an existing EC2
+    instance with a privileged instance profile -> push an SSH key to it
+    and log in as that role."""
+    return _existing_resource_edges(
+        principal,
+        account,
+        account.ec2_instances,
+        lambda i: i.instance_profile_role_arn,
+        "ec2-instance-connect:SendSSHPublicKey",
+        "ec2_instance_connect",
+    )
+
+
+def check_ssm_send_command(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#21: ssm:SendCommand on an existing EC2 instance with a privileged
+    instance profile -> run arbitrary commands on it as that role."""
+    return _existing_resource_edges(
+        principal,
+        account,
+        account.ec2_instances,
+        lambda i: i.instance_profile_role_arn,
+        "ssm:SendCommand",
+        "ssm_send_command",
+    )
+
+
+def check_ssm_start_session(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#22: ssm:StartSession on an existing EC2 instance with a privileged
+    instance profile -> open an interactive shell on it as that role."""
+    return _existing_resource_edges(
+        principal,
+        account,
+        account.ec2_instances,
+        lambda i: i.instance_profile_role_arn,
+        "ssm:StartSession",
+        "ssm_start_session",
+    )
+
+
+def check_sagemaker_presigned_url(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#23: sagemaker:CreatePresignedNotebookInstanceUrl on an existing
+    notebook -> open a terminal inside it and reach its execution role's
+    credentials."""
+    return _existing_resource_edges(
+        principal,
+        account,
+        account.sagemaker_notebooks,
+        lambda n: n.execution_role_arn,
+        "sagemaker:CreatePresignedNotebookInstanceUrl",
+        "sagemaker_presigned_notebook_url",
+    )
+
+
+def check_glue_update_dev_endpoint(principal: User | Group | Role, account: Account) -> list[Edge]:
+    """#24: glue:UpdateDevEndpoint on an existing dev endpoint -> point it
+    at attacker-controlled code that then runs as its role."""
+    return _existing_resource_edges(
+        principal,
+        account,
+        account.glue_dev_endpoints,
+        lambda e: e.role_arn,
+        "glue:UpdateDevEndpoint",
+        "glue_update_dev_endpoint",
+    )
+
+
+def check_cloudformation_update_stack(
+    principal: User | Group | Role, account: Account
+) -> list[Edge]:
+    """#25: cloudformation:UpdateStack on an existing stack that has an
+    execution role -> redeploy it with attacker-controlled resources that
+    run as that role."""
+    return _existing_resource_edges(
+        principal,
+        account,
+        account.cloudformation_stacks,
+        lambda s: s.role_arn,
+        "cloudformation:UpdateStack",
+        "cloudformation_update_stack",
+    )
+
+
 CHECKS = [
     check_new_policy_version,
     check_attach_managed_policy,
@@ -444,6 +562,12 @@ CHECKS = [
     check_sagemaker_notebook_pass_role,
     check_sagemaker_training_pass_role,
     check_sagemaker_processing_pass_role,
+    check_ec2_instance_connect,
+    check_ssm_send_command,
+    check_ssm_start_session,
+    check_sagemaker_presigned_url,
+    check_glue_update_dev_endpoint,
+    check_cloudformation_update_stack,
 ]
 
 

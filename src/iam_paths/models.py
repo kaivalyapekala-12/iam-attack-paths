@@ -197,12 +197,61 @@ class LambdaFunction:
 
 
 @dataclass(frozen=True)
+class EC2Instance:
+    """An EC2 instance and the role its attached instance profile grants.
+    Same story as LambdaFunction: not in get-account-authorization-
+    details, comes from a separate ec2:DescribeInstances call, empty
+    unless a live-mode loader or test supplies it. Backs techniques #20
+    (EC2 Instance Connect) and #21/#22 (SSM SendCommand/StartSession),
+    which all need an instance that already exists with a privileged
+    profile attached -- not just permission to create one."""
+
+    arn: str
+    instance_profile_role_arn: str
+
+
+@dataclass(frozen=True)
+class SageMakerNotebook:
+    """Backs technique #23 (CreatePresignedNotebookInstanceUrl on an
+    existing notebook). From sagemaker:ListNotebookInstances in live
+    mode; empty otherwise."""
+
+    arn: str
+    execution_role_arn: str
+
+
+@dataclass(frozen=True)
+class GlueDevEndpoint:
+    """Backs technique #24 (UpdateDevEndpoint on an existing endpoint).
+    From glue:GetDevEndpoints in live mode; empty otherwise."""
+
+    arn: str
+    role_arn: str
+
+
+@dataclass(frozen=True)
+class CloudFormationStack:
+    """Backs technique #25 (UpdateStack on an existing stack). From
+    cloudformation:DescribeStacks in live mode; empty otherwise. Only
+    stacks with an execution role matter here -- one with none runs as
+    the deployer's own credentials, not a privileged service role, so
+    updating it doesn't escalate anything."""
+
+    arn: str
+    role_arn: str | None
+
+
+@dataclass(frozen=True)
 class Account:
     users: list[User] = field(default_factory=list)
     groups: list[Group] = field(default_factory=list)
     roles: list[Role] = field(default_factory=list)
     managed_policies: dict[str, Policy] = field(default_factory=dict)
     lambda_functions: list[LambdaFunction] = field(default_factory=list)
+    ec2_instances: list[EC2Instance] = field(default_factory=list)
+    sagemaker_notebooks: list[SageMakerNotebook] = field(default_factory=list)
+    glue_dev_endpoints: list[GlueDevEndpoint] = field(default_factory=list)
+    cloudformation_stacks: list[CloudFormationStack] = field(default_factory=list)
 
     def all_principals(self) -> list[User | Group | Role]:
         """Every principal a check function might need to run against.

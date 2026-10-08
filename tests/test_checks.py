@@ -6,19 +6,25 @@ from iam_paths.checks import (
     check_assume_role,
     check_attach_managed_policy,
     check_cloudformation_pass_role,
+    check_cloudformation_update_stack,
     check_codebuild_pass_role,
     check_console_password,
     check_create_access_key,
     check_datapipeline_pass_role,
+    check_ec2_instance_connect,
     check_ec2_pass_role,
     check_glue_pass_role,
+    check_glue_update_dev_endpoint,
     check_lambda_pass_role,
     check_new_policy_version,
     check_rewrite_trust_policy,
     check_rollback_policy_version,
     check_sagemaker_notebook_pass_role,
+    check_sagemaker_presigned_url,
     check_sagemaker_processing_pass_role,
     check_sagemaker_training_pass_role,
+    check_ssm_send_command,
+    check_ssm_start_session,
     check_update_lambda_code,
     check_write_inline_policy,
     run_all_checks,
@@ -27,12 +33,16 @@ from iam_paths.loader import load_account
 from iam_paths.models import (
     ADMIN,
     Account,
+    CloudFormationStack,
+    EC2Instance,
+    GlueDevEndpoint,
     LambdaFunction,
     ManagedPolicyRef,
     Policy,
     PolicyDocument,
     PolicyVersion,
     Role,
+    SageMakerNotebook,
     Statement,
     User,
 )
@@ -141,7 +151,7 @@ def test_bob_can_pass_lambdaadminrole_to_a_lambda_function():
 
 
 def test_checks_list_matches_implemented_techniques():
-    assert len(CHECKS) == 19
+    assert len(CHECKS) == 25
 
 
 def test_write_inline_policy_returns_no_edge_when_not_allowed():
@@ -539,3 +549,164 @@ def test_lambda_pass_role_without_any_trigger_action_produces_no_edge():
     account = Account(users=[attacker], roles=[role])
 
     assert check_lambda_pass_role(attacker, account) == []
+
+
+# --- #20-#25: checks that depend on an existing-resource inventory that's
+# never populated from the offline sample (see each dataclass's docstring
+# in models.py), so they're only exercised here via constructed fixtures. ---
+
+
+def _attacker_with(action: str, resource: str) -> User:
+    return User(
+        name="attacker",
+        arn="arn:aws:iam::123456789012:user/attacker",
+        user_id="A1",
+        inline_policies=[
+            Policy(
+                name="p",
+                document=PolicyDocument(
+                    statements=[Statement(effect="Allow", actions=[action], resources=[resource])]
+                ),
+            )
+        ],
+    )
+
+
+def test_ec2_instance_connect_edge_to_instance_profile_role():
+    role = Role(
+        name="InstanceRole",
+        arn="arn:aws:iam::123456789012:role/InstanceRole",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    instance = EC2Instance(
+        arn="arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0",
+        instance_profile_role_arn=role.arn,
+    )
+    attacker = _attacker_with("ec2-instance-connect:SendSSHPublicKey", "*")
+    account = Account(users=[attacker], roles=[role], ec2_instances=[instance])
+
+    edges = check_ec2_instance_connect(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].target == role.arn
+    assert edges[0].technique == "ec2_instance_connect"
+
+
+def test_ec2_instance_connect_skips_instance_with_unresolvable_role():
+    # The inventory names a role ARN that isn't in account.roles -- can't
+    # claim an edge to a role we don't actually know exists.
+    instance = EC2Instance(
+        arn="arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0",
+        instance_profile_role_arn="arn:aws:iam::123456789012:role/Unknown",
+    )
+    attacker = _attacker_with("ec2-instance-connect:SendSSHPublicKey", "*")
+    account = Account(users=[attacker], ec2_instances=[instance])
+
+    assert check_ec2_instance_connect(attacker, account) == []
+
+
+def test_ssm_send_command_and_start_session_edges():
+    role = Role(
+        name="InstanceRole",
+        arn="arn:aws:iam::123456789012:role/InstanceRole",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    instance = EC2Instance(
+        arn="arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0",
+        instance_profile_role_arn=role.arn,
+    )
+    attacker = User(
+        name="attacker",
+        arn="arn:aws:iam::123456789012:user/attacker",
+        user_id="A1",
+        inline_policies=[
+            Policy(
+                name="p",
+                document=PolicyDocument(
+                    statements=[
+                        Statement(
+                            effect="Allow",
+                            actions=["ssm:SendCommand", "ssm:StartSession"],
+                            resources=["*"],
+                        )
+                    ]
+                ),
+            )
+        ],
+    )
+    account = Account(users=[attacker], roles=[role], ec2_instances=[instance])
+
+    send_edges = check_ssm_send_command(attacker, account)
+    session_edges = check_ssm_start_session(attacker, account)
+    assert len(send_edges) == 1 and send_edges[0].technique == "ssm_send_command"
+    assert len(session_edges) == 1 and session_edges[0].technique == "ssm_start_session"
+
+
+def test_sagemaker_presigned_url_edge_to_existing_notebook_role():
+    role = Role(
+        name="NotebookRole",
+        arn="arn:aws:iam::123456789012:role/NotebookRole",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    notebook = SageMakerNotebook(
+        arn="arn:aws:sagemaker:us-east-1:123456789012:notebook-instance/nb",
+        execution_role_arn=role.arn,
+    )
+    attacker = _attacker_with("sagemaker:CreatePresignedNotebookInstanceUrl", "*")
+    account = Account(users=[attacker], roles=[role], sagemaker_notebooks=[notebook])
+
+    edges = check_sagemaker_presigned_url(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].target == role.arn
+
+
+def test_glue_update_dev_endpoint_edge_to_existing_endpoint_role():
+    role = Role(
+        name="GlueRole",
+        arn="arn:aws:iam::123456789012:role/GlueRole",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    endpoint = GlueDevEndpoint(
+        arn="arn:aws:glue:us-east-1:123456789012:devEndpoint/ep", role_arn=role.arn
+    )
+    attacker = _attacker_with("glue:UpdateDevEndpoint", "*")
+    account = Account(users=[attacker], roles=[role], glue_dev_endpoints=[endpoint])
+
+    edges = check_glue_update_dev_endpoint(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].target == role.arn
+
+
+def test_cloudformation_update_stack_edge_to_existing_stack_role():
+    role = Role(
+        name="StackRole",
+        arn="arn:aws:iam::123456789012:role/StackRole",
+        role_id="R1",
+        assume_role_policy=PolicyDocument(statements=[]),
+    )
+    stack = CloudFormationStack(
+        arn="arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc",
+        role_arn=role.arn,
+    )
+    attacker = _attacker_with("cloudformation:UpdateStack", "*")
+    account = Account(users=[attacker], roles=[role], cloudformation_stacks=[stack])
+
+    edges = check_cloudformation_update_stack(attacker, account)
+    assert len(edges) == 1
+    assert edges[0].target == role.arn
+
+
+def test_cloudformation_update_stack_skips_stack_with_no_execution_role():
+    # A stack deployed without an execution role runs as the deployer's
+    # own credentials, not a privileged service role -- updating it isn't
+    # an escalation.
+    stack = CloudFormationStack(
+        arn="arn:aws:cloudformation:us-east-1:123456789012:stack/my-stack/abc", role_arn=None
+    )
+    attacker = _attacker_with("cloudformation:UpdateStack", "*")
+    account = Account(users=[attacker], cloudformation_stacks=[stack])
+
+    assert check_cloudformation_update_stack(attacker, account) == []
